@@ -1,7 +1,10 @@
 package com.qwe7002.telegram_sms_compat;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.os.Build;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -20,7 +23,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.conscrypt.Conscrypt;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
@@ -31,24 +33,36 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Security;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import io.paperdb.Paper;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+
 import okhttp3.Call;
+import okhttp3.ConnectionSpec;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.TlsVersion;
 import okhttp3.dnsoverhttps.DnsOverHttps;
 
 
@@ -59,6 +73,7 @@ class public_func {
     static final int CHAT_COMMAND_NOTIFY_ID = 2;
     static final int NOTIFICATION_LISTENER_SERVICE_NOTIFY_ID = 3;
     static final int RESEND_SERVICE_NOTIFY_ID = 5;
+    static final int WEB_CONFIG_NOTIFY_ID = 6;
     private static final String TELEGRAM_API_DOMAIN = "api.telegram.org";
     private static final String DNS_OVER_HTTP_ADDRSS = "https://cloudflare-dns.com/dns-query";
 
@@ -145,12 +160,41 @@ class public_func {
 
     @NotNull
     static OkHttpClient get_okhttp_obj(boolean doh_switch) {
-        Security.insertProviderAt(Conscrypt.newProvider(), 1);
+        Log.d("get_okhttp_obj", "Creating OkHttpClient - Android SDK: " + android.os.Build.VERSION.SDK_INT 
+                + " (API 16=" + android.os.Build.VERSION_CODES.JELLY_BEAN 
+                + ", API 21=" + android.os.Build.VERSION_CODES.LOLLIPOP + ")");
+        
         OkHttpClient.Builder okhttp = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true);
+
+        // Conscrypt (installed in main_activity) handles TLS 1.2/1.3 automatically
+        // This is a fallback in case Conscrypt installation fails
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN 
+                && android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                Log.d("get_okhttp_obj", "Applying fallback TLS 1.2 configuration for Android 4.x/5.0");
+                
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, null, null);
+                SSLSocketFactory tlsSocketFactory = new Tls12SocketFactory(sslContext.getSocketFactory());
+                
+                okhttp.sslSocketFactory(tlsSocketFactory, getDefaultTrustManager());
+                
+                ConnectionSpec tlsSpec = new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+                        .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_1)
+                        .build();
+                
+                okhttp.connectionSpecs(Arrays.asList(tlsSpec, ConnectionSpec.COMPATIBLE_TLS));
+                
+                Log.d("get_okhttp_obj", "Fallback TLS 1.2 configuration applied");
+            } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                Log.e("get_okhttp_obj", "Failed to apply fallback TLS 1.2", e);
+            }
+        }
+
         if (doh_switch) {
             okhttp.dns(new DnsOverHttps.Builder().client(okhttp.build())
                     .url(HttpUrl.get(DNS_OVER_HTTP_ADDRSS))
@@ -160,6 +204,99 @@ class public_func {
         }
         return okhttp.build();
     }
+
+    // Custom SSLSocketFactory that enables TLS 1.2 on Android 4.4.4
+    private static class Tls12SocketFactory extends SSLSocketFactory {
+        private static final String TAG = "Tls12SocketFactory";
+        private static final String[] TLS_V12_PROTOCOLS = {"TLSv1.2", "TLSv1.1", "TLSv1"};
+        private final SSLSocketFactory delegate;
+
+        public Tls12SocketFactory(SSLSocketFactory base) {
+            this.delegate = base;
+            Log.d(TAG, "Tls12SocketFactory created");
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public SSLSocket createSocket(java.net.Socket s, String host, int port, boolean autoClose) throws IOException {
+            Log.d(TAG, "Creating socket for host: " + host);
+            return enableTls12(delegate.createSocket(s, host, port, autoClose));
+        }
+
+        @Override
+        public SSLSocket createSocket(String host, int port) throws IOException {
+            Log.d(TAG, "Creating socket for host: " + host);
+            return enableTls12(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public SSLSocket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+            Log.d(TAG, "Creating socket for host: " + host);
+            return enableTls12(delegate.createSocket(host, port, localHost, localPort));
+        }
+
+        @Override
+        public SSLSocket createSocket(InetAddress host, int port) throws IOException {
+            Log.d(TAG, "Creating socket for address: " + host);
+            return enableTls12(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public SSLSocket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+            Log.d(TAG, "Creating socket for address: " + address);
+            return enableTls12(delegate.createSocket(address, port, localAddress, localPort));
+        }
+
+        private SSLSocket enableTls12(java.net.Socket socket) {
+            if (socket instanceof SSLSocket) {
+                SSLSocket sslSocket = (SSLSocket) socket;
+                
+                // Log supported protocols
+                String[] supportedProtocols = sslSocket.getSupportedProtocols();
+                Log.d(TAG, "Supported protocols: " + Arrays.toString(supportedProtocols));
+                
+                // Log enabled protocols before modification
+                String[] enabledBefore = sslSocket.getEnabledProtocols();
+                Log.d(TAG, "Enabled protocols before: " + Arrays.toString(enabledBefore));
+                
+                // Enable TLS 1.2 (and fallbacks for compatibility)
+                sslSocket.setEnabledProtocols(TLS_V12_PROTOCOLS);
+                
+                // Log enabled protocols after modification
+                String[] enabledAfter = sslSocket.getEnabledProtocols();
+                Log.d(TAG, "Enabled protocols after: " + Arrays.toString(enabledAfter));
+            }
+            return (SSLSocket) socket;
+        }
+    }
+
+    // Get default trust manager
+    private static X509TrustManager getDefaultTrustManager() {
+        try {
+            javax.net.ssl.TrustManagerFactory trustManagerFactory =
+                    javax.net.ssl.TrustManagerFactory.getInstance(
+                            javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            trustManagerFactory.init((java.security.KeyStore) null);
+            TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
+            if (trustManagers.length != 1 || !(trustManagers[0] instanceof X509TrustManager)) {
+                throw new IllegalStateException("Unexpected default trust managers:"
+                        + Arrays.toString(trustManagers));
+            }
+            return (X509TrustManager) trustManagers[0];
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get default trust manager", e);
+        }
+    }
+
 
     private static InetAddress get_by_ip(String host) {
         try {
@@ -292,10 +429,10 @@ class public_func {
 
     static void add_resend_loop(Context context, String message) {
         ArrayList<String> resend_list;
-        Paper.init(context);
-        resend_list = Paper.book().read("resend_list", new ArrayList<>());
+        PaperCompat.init(context);
+        resend_list = PaperCompat.book().read("resend_list", new ArrayList<>());
         resend_list.add(message);
-        Paper.book().write("resend_list", resend_list);
+        PaperCompat.book().write("resend_list", resend_list);
         start_resend(context);
     }
 
@@ -311,7 +448,29 @@ class public_func {
 
     @NotNull
     static Notification get_notification_obj(Context context, String notification_name) {
-        Notification.Builder result_builder = new Notification.Builder(context)
+        Notification.Builder result_builder;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Create notification channel for Android 8.0+
+            String channelId = "telegram_sms_compat_service";
+            String channelName = "Telegram SMS Compat Services";
+            NotificationChannel channel = new NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription("Background services for Telegram SMS compatibility");
+            channel.enableLights(false);
+            channel.enableVibration(false);
+            channel.setShowBadge(false);
+
+            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(channel);
+            }
+
+            result_builder = new Notification.Builder(context, channelId);
+        } else {
+            result_builder = new Notification.Builder(context);
+        }
+
+        result_builder
                 .setAutoCancel(false)
                 .setSmallIcon(R.drawable.ic_stat)
                 .setOngoing(true)
@@ -320,6 +479,7 @@ class public_func {
                 .setContentTitle(context.getString(R.string.app_name))
                 .setContentText(notification_name + context.getString(R.string.service_is_running))
                 .setPriority(Notification.PRIORITY_MIN);
+
         return result_builder.build();
     }
 
@@ -336,6 +496,11 @@ class public_func {
     static void start_service(Context context, Boolean battery_switch, Boolean chat_command_switch) {
         Intent battery_service = new Intent(context, com.qwe7002.telegram_sms_compat.battery_service.class);
         Intent chat_long_polling_service = new Intent(context, chat_command_service.class);
+        Intent web_config_service = new Intent(context, WebConfigService.class);
+
+        // Always start WebConfigService for configuration access
+        context.startService(web_config_service);
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
             if (is_notify_listener(context)) {
                 if (is_notify_listener(context)) {
@@ -446,7 +611,7 @@ class public_func {
 
 
     static void add_message_list(String message_id, String phone) {
-        Paper.book().write(message_id, phone);
+        PaperCompat.book().write(message_id, phone);
         Log.d("add_message_list", "add_message_list: " + message_id);
     }
 

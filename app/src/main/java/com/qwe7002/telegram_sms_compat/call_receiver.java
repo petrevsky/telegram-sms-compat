@@ -18,7 +18,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -33,7 +32,7 @@ public class call_receiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, @NotNull Intent intent) {
-        Paper.init(context);
+        PaperCompat.init(context);
         Log.d("call_receiver", "onReceive: " + intent.getAction());
         if (intent.getStringExtra("incoming_number") != null) {
             incoming_number = intent.getStringExtra("incoming_number");

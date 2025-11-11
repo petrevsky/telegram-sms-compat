@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -34,7 +33,7 @@ public class sms_receiver extends BroadcastReceiver {
     final static CodeauxLibPortable code_aux_lib = new CodeauxLibPortable();
 
     public void onReceive(final Context context, Intent intent) {
-        Paper.init(context);
+        PaperCompat.init(context);
         final String TAG = "sms_receiver";
         Log.d(TAG, "Receive action: " + intent.getAction());
         Bundle extras = intent.getExtras();
@@ -128,7 +127,7 @@ public class sms_receiver extends BroadcastReceiver {
         }
 
         if (!is_verification_code && !is_trusted_phone) {
-            ArrayList<String> black_list_array = Paper.book().read("black_keyword_list", new ArrayList<>());
+            ArrayList<String> black_list_array = PaperCompat.book().read("black_keyword_list", new ArrayList<>());
             for (String black_list_item : black_list_array) {
                 if (black_list_item.isEmpty()) {
                     continue;
@@ -137,13 +136,13 @@ public class sms_receiver extends BroadcastReceiver {
                     SimpleDateFormat simpleDateFormat = new SimpleDateFormat(context.getString(R.string.time_format), Locale.UK);
                     String write_message = request_body.text + "\n" + context.getString(R.string.time) + simpleDateFormat.format(new Date(System.currentTimeMillis()));
                     ArrayList<String> spam_sms_list;
-                    Paper.init(context);
-                    spam_sms_list = Paper.book().read("spam_sms_list", new ArrayList<>());
+                    PaperCompat.init(context);
+                    spam_sms_list = PaperCompat.book().read("spam_sms_list", new ArrayList<>());
                     if (spam_sms_list.size() >= 5) {
                         spam_sms_list.remove(0);
                     }
                     spam_sms_list.add(write_message);
-                    Paper.book().write("spam_sms_list", spam_sms_list);
+                    PaperCompat.book().write("spam_sms_list", spam_sms_list);
                     Log.i(TAG, "Detected message contains blacklist keywords, add spam list");
                     return;
                 }

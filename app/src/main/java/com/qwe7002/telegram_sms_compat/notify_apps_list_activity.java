@@ -25,7 +25,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.util.ArrayList;
 import java.util.List;
 
-import io.paperdb.Paper;
 
 public class notify_apps_list_activity extends AppCompatActivity {
     private app_adapter app_adapter;
@@ -56,7 +55,7 @@ public class notify_apps_list_activity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Context context = getApplicationContext();
-        Paper.init(context);
+        PaperCompat.init(context);
         this.setTitle(getString(R.string.app_list));
         setContentView(R.layout.activity_notify_apps_list);
         final ListView app_list = findViewById(R.id.app_listview);
@@ -123,7 +122,7 @@ public class notify_apps_list_activity extends AppCompatActivity {
 
         app_adapter(Context context) {
             this.context = context;
-            this.listen_list = Paper.book().read("notify_listen_list", new ArrayList<>());
+            this.listen_list = PaperCompat.book().read("notify_listen_list", new ArrayList<>());
         }
 
         public List<app_info> getData() {
@@ -179,7 +178,7 @@ public class notify_apps_list_activity extends AppCompatActivity {
             view_holder_object.app_checkbox.setOnClickListener(v -> {
                 app_info item_info = (app_info) getItem(position);
                 String package_name = item_info.package_name;
-                List<String> listen_list_temp = Paper.book().read("notify_listen_list", new ArrayList<>());
+                List<String> listen_list_temp = PaperCompat.book().read("notify_listen_list", new ArrayList<>());
                 if (view_holder_object.app_checkbox.isChecked()) {
                     if (!listen_list_temp.contains(package_name)) {
                         listen_list_temp.add(package_name);
@@ -188,7 +187,7 @@ public class notify_apps_list_activity extends AppCompatActivity {
                     listen_list_temp.remove(package_name);
                 }
                 Log.d(TAG, "notify_listen_list: " + listen_list_temp);
-                Paper.book().write("notify_listen_list", listen_list_temp);
+                PaperCompat.book().write("notify_listen_list", listen_list_temp);
                 listen_list = listen_list_temp;
             });
             return convert_view;

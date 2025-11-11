@@ -18,7 +18,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -35,7 +34,7 @@ public class resend_service extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        resend_list = Paper.book().read(table_name, new ArrayList<>());
+        resend_list = PaperCompat.book().read(table_name, new ArrayList<>());
         Notification notification = public_func.get_notification_obj(context, getString(R.string.failed_resend));
         startForeground(public_func.RESEND_SERVICE_NOTIFY_ID, notification);
         return START_NOT_STICKY;
@@ -55,9 +54,9 @@ public class resend_service extends Service {
         try {
             Response response = call.execute();
             if (response.code() == 200) {
-                ArrayList<String> resend_list_local = Paper.book().read(table_name, new ArrayList<>());
+                ArrayList<String> resend_list_local = PaperCompat.book().read(table_name, new ArrayList<>());
                 resend_list_local.remove(message);
-                Paper.book().write(table_name, resend_list_local);
+                PaperCompat.book().write(table_name, resend_list_local);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -68,7 +67,7 @@ public class resend_service extends Service {
     public void onCreate() {
         super.onCreate();
         context = getApplicationContext();
-        Paper.init(context);
+        PaperCompat.init(context);
         IntentFilter filter = new IntentFilter();
         filter.addAction(public_func.BROADCAST_STOP_SERVICE);
         receiver = new stop_notify_receiver();
@@ -76,7 +75,7 @@ public class resend_service extends Service {
         SharedPreferences sharedPreferences = context.getSharedPreferences("data", MODE_PRIVATE);
         request_uri = public_func.get_url(sharedPreferences.getString("bot_token", ""), "SendMessage");
         new Thread(() -> {
-            resend_list = Paper.book().read(table_name, new ArrayList<>());
+            resend_list = PaperCompat.book().read(table_name, new ArrayList<>());
             while (true) {
                 if (public_func.check_network_status(context)) {
                     ArrayList<String> send_list = resend_list;

@@ -43,6 +43,10 @@ public class battery_service extends Service {
     public void onCreate() {
         super.onCreate();
         context = getApplicationContext();
+        
+        // Note: Conscrypt is now installed globally in TelegramSMSApplication.onCreate()
+        // for TLS 1.2/1.3 support on Android 4.4.4 across all app processes
+        
         SharedPreferences sharedPreferences = context.getSharedPreferences("data", MODE_PRIVATE);
         chat_id = sharedPreferences.getString("chat_id", "");
         bot_token = sharedPreferences.getString("bot_token", "");

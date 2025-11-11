@@ -55,7 +55,6 @@
                     android:inputType="numberSigned"
                     android:maxLines="1"
                     android:singleLine="true"
-
                     tools:ignore="TextFields" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -150,6 +149,13 @@
                 android:layout_height="wrap_content"
                 android:alpha="@dimen/button_alpha"
                 android:text="@string/test_and_save" />
+
+            <Button
+                android:id="@+id/web_config_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alpha="@dimen/button_alpha"
+                android:text="@string/start_web_config" />
 
         </LinearLayout>
     </ScrollView>

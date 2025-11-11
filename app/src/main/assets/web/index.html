@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Telegram SMS Forwarder - Configuration</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>📱 Telegram SMS Forwarder</h1>
+                <p class="subtitle">Web Configuration Interface</p>
+            </header>
+
+            <div id="notification" class="notification hidden"></div>
+
+            <div class="card">
+                <h2>🤖 Bot Configuration</h2>
+                <form id="configForm">
+                    <div class="form-group">
+                        <label for="botToken">Bot Token</label>
+                        <input
+                            type="text"
+                            id="botToken"
+                            name="botToken"
+                            placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                            required
+                        />
+                        <small
+                            >Get your bot token from
+                            <a href="https://t.me/BotFather" target="_blank"
+                                >@BotFather</a
+                            ></small
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chatId">Chat ID</label>
+                        <input
+                            type="text"
+                            id="chatId"
+                            name="chatId"
+                            placeholder="-1234567890"
+                            required
+                        />
+                        <small
+                            >Your Telegram chat ID (can be negative for
+                            groups/channels)</small
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trustedNumber"
+                            >Trusted Phone Number (Optional)</label
+                        >
+                        <input
+                            type="tel"
+                            id="trustedNumber"
+                            name="trustedNumber"
+                            placeholder="+1234567890"
+                        />
+                        <small
+                            >Fallback SMS will be sent to this number when
+                            network is unavailable</small
+                        >
+                    </div>
+
+                    <h3>⚙️ Features</h3>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="chatCommand"
+                                name="chatCommand"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong>Response to chat command</strong>
+                            <small
+                                >Allow bot to respond to commands like /help,
+                                /battery, /info</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="batteryMonitoring"
+                                name="batteryMonitoring"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong>Monitor battery level change</strong>
+                            <small
+                                >Get notifications when battery level changes
+                                significantly</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="chargerStatus"
+                                name="chargerStatus"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong>Charger status notification</strong>
+                            <small
+                                >Get notified when charger is
+                                connected/disconnected</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="fallbackSms"
+                                name="fallbackSms"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong
+                                >Forward SMS to trusted number when network
+                                unavailable</strong
+                            >
+                            <small
+                                >Requires trusted phone number to be set</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="verificationCode"
+                                name="verificationCode"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong
+                                >Verification code automatic extraction</strong
+                            >
+                            <small
+                                >Automatically extract and highlight
+                                verification codes</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="privacyMode"
+                                name="privacyMode"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong
+                                >Respond only to commands containing the Bot
+                                username</strong
+                            >
+                            <small>Privacy mode for group chats</small>
+                        </div>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input
+                                type="checkbox"
+                                id="dohSwitch"
+                                name="dohSwitch"
+                            />
+                            <span class="slider"></span>
+                        </label>
+                        <div class="switch-label">
+                            <strong>Using DNS over HTTPS</strong>
+                            <small
+                                >⚠️ Disable this on Android 4.4.4 if you have
+                                DNS issues</small
+                            >
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button
+                            type="button"
+                            id="loadBtn"
+                            class="btn btn-secondary"
+                        >
+                            <span class="btn-icon">🔄</span> Load Current Config
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="btn-icon">💾</span> Save Configuration
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📊 System Information</h2>
+                <div id="systemInfo" class="system-info">
+                    <div class="info-item">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value" id="serviceStatus"
+                            >Loading...</span
+                        >
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Android Version:</span>
+                        <span class="info-value" id="androidVersion">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">App Version:</span>
+                        <span class="info-value" id="appVersion">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Battery Level:</span>
+                        <span class="info-value" id="batteryLevel">-</span>
+                    </div>
+                </div>
+                <button id="refreshInfoBtn" class="btn btn-secondary btn-block">
+                    <span class="btn-icon">🔄</span> Refresh Info
+                </button>
+            </div>
+
+            <footer>
+                <p>
+                    Telegram SMS Forwarder &copy; 2025 |
+                    <a
+                        href="https://github.com/qwe7002/telegram-sms"
+                        target="_blank"
+                        >GitHub</a
+                    >
+                </p>
+            </footer>
+        </div>
+
+        <script src="script.js"></script>
+    </body>
+</html>

@@ -44,7 +44,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -62,6 +61,9 @@ public class main_activity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         context = getApplicationContext();
+        
+        // Note: Conscrypt is now installed globally in TelegramSMSApplication.onCreate()
+        // for TLS 1.2/1.3 support on Android 4.4.4 across all app components
 
         final EditText chat_id_editview = findViewById(R.id.chat_id_editview);
         final EditText bot_token_editview = findViewById(R.id.bot_token_editview);
@@ -76,7 +78,7 @@ public class main_activity extends AppCompatActivity {
         final Button save_button = findViewById(R.id.save_button);
         final Button get_id_button = findViewById(R.id.get_id_button);
 
-        Paper.init(context);
+        PaperCompat.init(context);
         sharedPreferences = getSharedPreferences("data", MODE_PRIVATE);
 
         String bot_token_save = sharedPreferences.getString("bot_token", "");
@@ -164,10 +166,16 @@ public class main_activity extends AppCompatActivity {
             }
         });
         get_id_button.setOnClickListener(v -> {
-            if (bot_token_editview.getText().toString().isEmpty()) {
+            Log.d(TAG, "Get ID button clicked");
+            String botToken = bot_token_editview.getText().toString().trim();
+            Log.d(TAG, "Bot token for getUpdates: '" + botToken + "'");
+
+            if (botToken.isEmpty()) {
+                Log.d(TAG, "Bot token is empty");
                 Snackbar.make(v, R.string.token_not_configure, Snackbar.LENGTH_LONG).show();
                 return;
             }
+
             new Thread(() -> public_func.stop_all_service(context)).start();
             final ProgressDialog progress_dialog = new ProgressDialog(main_activity.this);
             progress_dialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
@@ -176,11 +184,21 @@ public class main_activity extends AppCompatActivity {
             progress_dialog.setIndeterminate(false);
             progress_dialog.setCancelable(false);
             progress_dialog.show();
-            String request_uri = public_func.get_url(bot_token_editview.getText().toString().trim(), "getUpdates");
-            OkHttpClient okhttp_client = public_func.get_okhttp_obj(doh_switch.isChecked());
+
+            String request_uri = public_func.get_url(botToken, "getUpdates");
+            Log.d(TAG, "Request URI: " + request_uri);
+
+            // Try without DoH first for Android 4.4.4 compatibility
+            OkHttpClient okhttp_client = public_func.get_okhttp_obj(false); // Force no DoH
             okhttp_client = okhttp_client.newBuilder()
                     .readTimeout(60, TimeUnit.SECONDS)
                     .build();
+            Log.d(TAG, "Using DoH: false (forced for compatibility)");
+
+            // First test basic connectivity
+            Log.d(TAG, "Testing basic connectivity first...");
+            testBasicConnectivity();
+            testTelegramConnectivity();
             polling_json request_body = new polling_json();
             request_body.timeout = 60;
             RequestBody body = RequestBody.create(public_func.JSON, new Gson().toJson(request_body));
@@ -196,9 +214,10 @@ public class main_activity extends AppCompatActivity {
             call.enqueue(new Callback() {
                 @Override
                 public void onFailure(@NotNull Call call, @NotNull IOException e) {
-                    e.printStackTrace();
+                    Log.e(TAG, "GetUpdates API call failed", e);
                     progress_dialog.cancel();
                     String error_message = error_head + e.getMessage();
+                    Log.e(TAG, "Error message: " + error_message);
                     public_func.write_log(context, error_message);
                     Looper.prepare();
                     Snackbar.make(v, error_message, Snackbar.LENGTH_LONG).show();
@@ -208,11 +227,14 @@ public class main_activity extends AppCompatActivity {
                 @Override
                 public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
                     progress_dialog.cancel();
+                    Log.d(TAG, "GetUpdates response code: " + response.code());
                     if (response.code() != 200) {
                         assert response.body() != null;
                         String result = response.body().string();
+                        Log.e(TAG, "GetUpdates error response: " + result);
                         JsonObject result_obj = JsonParser.parseString(result).getAsJsonObject();
                         String error_message = error_head + result_obj.get("description").getAsString();
+                        Log.e(TAG, "Parsed error message: " + error_message);
                         public_func.write_log(context, error_message);
                         Looper.prepare();
                         Snackbar.make(v, error_message, Snackbar.LENGTH_LONG).show();
@@ -221,9 +243,12 @@ public class main_activity extends AppCompatActivity {
                     }
                     assert response.body() != null;
                     String result = response.body().string();
+                    Log.d(TAG, "GetUpdates success response: " + result);
                     JsonObject result_obj = JsonParser.parseString(result).getAsJsonObject();
                     JsonArray chat_list = result_obj.getAsJsonArray("result");
+                    Log.d(TAG, "Found " + chat_list.size() + " updates in response");
                     if (chat_list.size() == 0) {
+                        Log.d(TAG, "No recent chats found - bot hasn't received messages recently");
                         Looper.prepare();
                         Snackbar.make(v, R.string.unable_get_recent, Snackbar.LENGTH_LONG).show();
                         Looper.loop();
@@ -272,18 +297,33 @@ public class main_activity extends AppCompatActivity {
         });
 
         save_button.setOnClickListener(v -> {
-            if (bot_token_editview.getText().toString().isEmpty() || chat_id_editview.getText().toString().isEmpty()) {
+            Log.d(TAG, "Save button clicked");
+            String botToken = bot_token_editview.getText().toString();
+            String chatId = chat_id_editview.getText().toString();
+            Log.d(TAG, "Bot token: '" + botToken + "', Chat ID: '" + chatId + "'");
+
+            if (botToken.isEmpty() || chatId.isEmpty()) {
+                Log.d(TAG, "Validation failed: bot token or chat id empty");
                 Snackbar.make(v, R.string.chat_id_or_token_not_config, Snackbar.LENGTH_LONG).show();
                 return;
             }
-            if (fallback_sms_switch.isChecked() && trusted_phone_number_editview.getText().toString().isEmpty()) {
+
+            String trustedPhone = trusted_phone_number_editview.getText().toString();
+            if (fallback_sms_switch.isChecked() && trustedPhone.isEmpty()) {
+                Log.d(TAG, "Validation failed: trusted phone number empty with fallback SMS enabled");
                 Snackbar.make(v, R.string.trusted_phone_number_empty, Snackbar.LENGTH_LONG).show();
                 return;
             }
-            if (!sharedPreferences.getBoolean("privacy_dialog_agree", false)) {
+
+            boolean privacyAgreed = sharedPreferences.getBoolean("privacy_dialog_agree", false);
+            Log.d(TAG, "Privacy dialog agreed: " + privacyAgreed);
+            if (!privacyAgreed) {
+                Log.d(TAG, "Showing privacy dialog");
                 show_privacy_dialog();
                 return;
             }
+
+            Log.d(TAG, "All validations passed, proceeding with save");
             final ProgressDialog progress_dialog = new ProgressDialog(main_activity.this);
             progress_dialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
             progress_dialog.setTitle(getString(R.string.connect_wait_title));
@@ -291,23 +331,32 @@ public class main_activity extends AppCompatActivity {
             progress_dialog.setIndeterminate(false);
             progress_dialog.setCancelable(false);
             progress_dialog.show();
-            String request_uri = public_func.get_url(bot_token_editview.getText().toString().trim(), "sendMessage");
+
+            String saveBotToken = bot_token_editview.getText().toString().trim();
+            String saveChatId = chat_id_editview.getText().toString().trim();
+            String request_uri = public_func.get_url(saveBotToken, "sendMessage");
+            Log.d(TAG, "Save request URI: " + request_uri);
+
             message_json request_body = new message_json();
-            request_body.chat_id = chat_id_editview.getText().toString().trim();
+            request_body.chat_id = saveChatId;
             request_body.text = getString(R.string.system_message_head) + "\n" + getString(R.string.success_connect);
             Gson gson = new Gson();
             String request_body_raw = gson.toJson(request_body);
             RequestBody body = RequestBody.create(public_func.JSON, request_body_raw);
-            OkHttpClient okhttp_client = public_func.get_okhttp_obj(doh_switch.isChecked());
+
+            // Use non-DoH for Android 4.4.4 compatibility
+            OkHttpClient okhttp_client = public_func.get_okhttp_obj(false); // Force no DoH
+            Log.d(TAG, "Save using DoH: false (forced for compatibility)");
             Request request = new Request.Builder().url(request_uri).method("POST", body).build();
             Call call = okhttp_client.newCall(request);
             final String error_head = "Send Message Error:";
             call.enqueue(new Callback() {
                 @Override
                 public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                    e.printStackTrace();
+                    Log.e(TAG, "SendMessage API call failed", e);
                     progress_dialog.cancel();
                     String error_message = error_head + e.getMessage();
+                    Log.e(TAG, "SendMessage error: " + error_message);
                     public_func.write_log(context, error_message);
                     Looper.prepare();
                     Snackbar.make(v, error_message, Snackbar.LENGTH_LONG)
@@ -317,14 +366,17 @@ public class main_activity extends AppCompatActivity {
 
                 @Override
                 public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-
                     String new_bot_token = bot_token_editview.getText().toString().trim();
                     progress_dialog.cancel();
+                    Log.d(TAG, "SendMessage response code: " + response.code());
+
                     if (response.code() != 200) {
                         assert response.body() != null;
                         String result = response.body().string();
+                        Log.e(TAG, "SendMessage error response: " + result);
                         JsonObject result_obj = JsonParser.parseString(result).getAsJsonObject();
                         String error_message = error_head + result_obj.get("description");
+                        Log.e(TAG, "SendMessage parsed error: " + error_message);
                         public_func.write_log(context, error_message);
                         Looper.prepare();
                         Snackbar.make(v, error_message, Snackbar.LENGTH_LONG).show();
@@ -333,9 +385,9 @@ public class main_activity extends AppCompatActivity {
                     }
                     if (!new_bot_token.equals(bot_token_save)) {
                         Log.i(TAG, "onResponse: The current bot token does not match the saved bot token, clearing the message database.");
-                        List<String> notify_listen_list = Paper.book().read("notify_listen_list", new ArrayList<>());
-                        Paper.book().destroy();
-                        Paper.book().write("notify_listen_list", notify_listen_list);
+                        List<String> notify_listen_list = PaperCompat.book().read("notify_listen_list", new ArrayList<>());
+                        PaperCompat.book().destroy();
+                        PaperCompat.book().write("notify_listen_list", notify_listen_list);
                     }
                     SharedPreferences.Editor editor = sharedPreferences.edit().clear();
                     editor.putString("bot_token", new_bot_token);
@@ -367,6 +419,70 @@ public class main_activity extends AppCompatActivity {
             });
         });
 
+        // Web Configuration button
+        final Button web_config_button = findViewById(R.id.web_config_button);
+        boolean webConfigRunning = is_web_config_running();
+        updateWebConfigButton(web_config_button, webConfigRunning);
+        
+        web_config_button.setOnClickListener(v -> {
+            if (is_web_config_running()) {
+                // Stop the service
+                Intent stopIntent = new Intent(context, WebConfigService.class);
+                stopService(stopIntent);
+                updateWebConfigButton(web_config_button, false);
+                Snackbar.make(v, "Web configuration server stopped", Snackbar.LENGTH_LONG).show();
+            } else {
+                // Start the service
+                Intent startIntent = new Intent(context, WebConfigService.class);
+                startService(startIntent);
+                updateWebConfigButton(web_config_button, true);
+                
+                // Show IP address in snackbar
+                String ipAddress = getDeviceIPAddress();
+                String message = ipAddress != null ? 
+                    getString(R.string.web_config_url, ipAddress) : 
+                    getString(R.string.web_config_running);
+                Snackbar.make(v, message, Snackbar.LENGTH_LONG).show();
+            }
+        });
+
+    }
+
+    private boolean is_web_config_running() {
+        android.app.ActivityManager manager = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        for (android.app.ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (WebConfigService.class.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void updateWebConfigButton(Button button, boolean running) {
+        if (running) {
+            button.setText(R.string.stop_web_config);
+        } else {
+            button.setText(R.string.start_web_config);
+        }
+    }
+
+    private String getDeviceIPAddress() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = java.net.NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface intf = interfaces.nextElement();
+                java.util.Enumeration<java.net.InetAddress> addrs = intf.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress addr = addrs.nextElement();
+                    if (!addr.isLoopbackAddress() && addr instanceof java.net.Inet4Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting IP address", e);
+        }
+        return null;
     }
 
     private void set_privacy_mode_checkbox(String chat_id, SwitchCompat chat_command, SwitchCompat privacy_mode_switch) {
@@ -486,7 +602,7 @@ public class main_activity extends AppCompatActivity {
             case R.id.spam_sms_keyword:
                 View spam_dialog_view = inflater.inflate(R.layout.set_keyword_layout, null);
                 final EditText editText = spam_dialog_view.findViewById(R.id.spam_sms_keyword);
-                ArrayList<String> black_keyword_list_old = Paper.book().read("black_keyword_list", new ArrayList<>());
+                ArrayList<String> black_keyword_list_old = PaperCompat.book().read("black_keyword_list", new ArrayList<>());
                 StringBuilder black_keyword_list_old_string = new StringBuilder();
                 int count = 0;
                 for (String list_item : black_keyword_list_old) {
@@ -503,13 +619,83 @@ public class main_activity extends AppCompatActivity {
                             String input = editText.getText().toString();
                             if (input.length() != 0) {
                                 String[] black_keyword_list = input.split(";");
-                                Paper.book().write("black_keyword_list", new ArrayList<>(Arrays.asList(black_keyword_list)));
+                                PaperCompat.book().write("black_keyword_list", new ArrayList<>(Arrays.asList(black_keyword_list)));
                             }
                         })
                         .show();
                 return true;
         }
         return false;
+    }
+
+    private void testBasicConnectivity() {
+        try {
+            // Test basic HTTP connectivity to a simple endpoint
+            OkHttpClient testClient = new OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .build();
+
+            Request testRequest = new Request.Builder()
+                    .url("http://httpbin.org/get") // Simple HTTP test endpoint
+                    .build();
+
+            testClient.newCall(testRequest).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    Log.e(TAG, "Basic HTTP connectivity test failed", e);
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    Log.d(TAG, "Basic HTTP connectivity test: " + response.code());
+                    if (response.code() == 200) {
+                        Log.d(TAG, "HTTP connectivity works, issue might be HTTPS/SSL");
+                    } else {
+                        Log.e(TAG, "HTTP connectivity failed with code: " + response.code());
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting up connectivity test", e);
+        }
+    }
+
+    private void testTelegramConnectivity() {
+        try {
+            // Test HTTP connectivity to Telegram API (using HTTP for Android 4.4.4 compatibility)
+            OkHttpClient testClient = new OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build();
+
+            // Test basic Telegram API endpoint (should return error but prove connectivity)
+            Request testRequest = new Request.Builder()
+                    .url("http://api.telegram.org/bot123456:test/getMe") // Invalid token but tests HTTP
+                    .build();
+
+            testClient.newCall(testRequest).enqueue(new Callback() {
+                @Override
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
+                    Log.e(TAG, "Telegram HTTP connectivity test failed", e);
+                    if (e.getMessage().contains("SSL") || e.getMessage().contains("certificate")) {
+                        Log.e(TAG, "SSL/Certificate issue detected on Android 4.4.4");
+                    }
+                }
+
+                @Override
+                public void onResponse(@NotNull Call call, @NotNull Response response) throws IOException {
+                    Log.d(TAG, "Telegram HTTP connectivity test: " + response.code());
+                    if (response.code() >= 200 && response.code() < 500) {
+                        Log.d(TAG, "HTTP to Telegram works! API authentication issue (expected)");
+                    } else {
+                        Log.e(TAG, "HTTP connectivity failed with code: " + response.code());
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting up Telegram connectivity test", e);
+        }
     }
 
     @Override

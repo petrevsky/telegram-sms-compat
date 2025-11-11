@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -70,7 +69,11 @@ public class chat_command_service extends Service {
     public void onCreate() {
         super.onCreate();
         context = getApplicationContext();
-        Paper.init(context);
+        
+        // Note: Conscrypt is now installed globally in TelegramSMSApplication.onCreate()
+        // for TLS 1.2/1.3 support on Android 4.4.4 across all app processes
+        
+        PaperCompat.init(context);
         sharedPreferences = context.getSharedPreferences("data", MODE_PRIVATE);
         chat_id = sharedPreferences.getString("chat_id", "");
         bot_token = sharedPreferences.getString("bot_token", "");
@@ -148,7 +151,7 @@ public class chat_command_service extends Service {
             request_msg = message_obj.get("text").getAsString();
         }
         if (message_obj.has("reply_to_message")) {
-            String phone_number = Paper.book().read(message_obj.get("reply_to_message").getAsJsonObject().get("message_id").getAsString(), null);
+            String phone_number = PaperCompat.book().read(message_obj.get("reply_to_message").getAsJsonObject().get("message_id").getAsString(), null);
             if (phone_number != null) {
                 public_func.send_sms(context, phone_number, request_msg);
                 return;
@@ -198,7 +201,7 @@ public class chat_command_service extends Service {
             case "/ping":
             case "/getinfo":
                 String spam_count = "";
-                ArrayList<String> spam_list = Paper.book().read("spam_sms_list", new ArrayList<>());
+                ArrayList<String> spam_list = PaperCompat.book().read("spam_sms_list", new ArrayList<>());
                 if (spam_list.size() != 0) {
                     spam_count = "\n" + getString(R.string.spam_count_title) + spam_list.size();
                 }
@@ -210,7 +213,7 @@ public class chat_command_service extends Service {
                 has_command = true;
                 break;
             case "/getspamsms":
-                ArrayList<String> spam_sms_list = Paper.book().read("spam_sms_list", new ArrayList<>());
+                ArrayList<String> spam_sms_list = PaperCompat.book().read("spam_sms_list", new ArrayList<>());
                 if (spam_sms_list.size() == 0) {
                     request_body.text = context.getString(R.string.system_message_head) + "\n" + getString(R.string.no_spam_history);
                     break;
@@ -238,9 +241,9 @@ public class chat_command_service extends Service {
 
                                 }
                             });
-                            ArrayList<String> resend_list_local = Paper.book().read("spam_sms_list", new ArrayList<>());
+                            ArrayList<String> resend_list_local = PaperCompat.book().read("spam_sms_list", new ArrayList<>());
                             resend_list_local.remove(item);
-                            Paper.book().write("spam_sms_list", resend_list_local);
+                            PaperCompat.book().write("spam_sms_list", resend_list_local);
                         }
                     }
                     public_func.write_log(context, "Send spam message is complete.");

@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?><!--suppress AndroidUnknownAttribute -->
+<?xml version="1.0" encoding="utf-8"?><!--suppress
+AndroidUnknownAttribute -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="com.qwe7002.telegram_sms_compat">
@@ -14,8 +15,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
+        android:name=".TelegramSMSApplication"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
@@ -35,6 +38,10 @@
         </service>
 
         <service android:name=".resend_service" />
+        <service
+            android:name=".WebConfigService"
+            android:enabled="true"
+            android:exported="false" />
         <service
             android:name=".chat_command_service"
             android:enabled="true"

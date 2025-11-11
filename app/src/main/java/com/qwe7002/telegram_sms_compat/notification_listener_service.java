@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import io.paperdb.Paper;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
@@ -46,7 +45,7 @@ public class notification_listener_service extends NotificationListenerService {
     public void onCreate() {
         super.onCreate();
         context = getApplicationContext();
-        Paper.init(context);
+        PaperCompat.init(context);
         sharedPreferences = context.getSharedPreferences("data", Context.MODE_PRIVATE);
         Notification notification = public_func.get_notification_obj(getApplicationContext(), getString(R.string.Notification_Listener_title));
         startForeground(public_func.NOTIFICATION_LISTENER_SERVICE_NOTIFY_ID, notification);
@@ -64,7 +63,7 @@ public class notification_listener_service extends NotificationListenerService {
         final String package_name = sbn.getPackageName();
         Log.d(TAG, "onNotificationPosted: " + package_name);
 
-        List<String> listen_list = Paper.book().read("notify_listen_list", new ArrayList<>());
+        List<String> listen_list = PaperCompat.book().read("notify_listen_list", new ArrayList<>());
         if (!listen_list.contains(package_name)) {
             Log.i(TAG, "[" + package_name + "] Not in the list of listening packages.");
             return;
